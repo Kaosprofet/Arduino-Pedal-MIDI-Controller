@@ -1,0 +1,193 @@
+#define DEBOUNCE 50
+
+struct key {                                            // Note pedals initiation
+    int pin;
+    int midiNote;
+    int debounce;
+    int noteSent;
+};
+
+struct key keys[] = {
+  { 22,  0, 0, 0 },                                     // C  brown
+  { 24,  1, 0, 0 },                                     // Db red
+  { 26,  2, 0, 0 },                                     // D  red
+  { 28,  3, 0, 0 },                                     // Eb orange
+  { 30,  4, 0, 0 },                                     // E  orange
+  { 32,  5, 0, 0 },                                     // F  yellow
+  { 34,  6, 0, 0 },                                     // Gb green
+  { 36,  7, 0, 0 },                                     // G  green
+  { 38,  8, 0, 0 },                                     // Ab blue
+  { 40,  9, 0, 0 },                                     // A  blue
+  { 42, 10, 0, 0 },                                     // Bb violet
+  { 44, 11, 0, 0 },                                     // B  violet
+  { 46, 12, 0, 0 },                                     // C  brown
+  {  0,  0, 0, 0 }                                      // end of list marker
+};
+/*                                                      // Uncomment to activete controls
+struct control {                                        // Control pedals initiation
+  int pin;
+  int value;
+  int debounce;
+};
+
+struct control controlPedals[] = {
+  { 1,  1, 0 },                                         // Octave up
+  { 2, -1, 0 },                                         // Octave down
+  { 3,  1, 0 },                                         // Velocity up
+  { 4, -1, 0 },                                         // Velocity down
+  { 0,  0, 0 }                                          // end of list marker
+};
+*/
+int octave = 2;                                         // Current octave, set start value for system (0-10)
+int noteVelocity = 100;                                 // Note velocity, set start value for system (0-127)
+int notePedalState;                                     // Note pedal state
+/*                                                      // Uncomment to activate controll and hold mode
+int controlSwitchState;                                 // Control switch state
+int modeSwitchPin = 11;                                 // Mode switch pin
+int modeSwitchState;                                    // Mode switch state
+int lastNoteSent;                                       // Last note sendt in hold mode
+*/
+byte byte1;                                             // Byte 1 for MIDI thru
+byte byte2;                                             // Byte 2 for MIDI thru
+byte byte3;                                             // Byte 3 for MIDI thru
+
+void setup() {                                          // Setup 
+  for(int i = 0; keys[i].pin != 0; ++i) {               // Set pinmode for note pedals
+    pinMode(keys[i].pin, INPUT_PULLUP);
+  }
+  /*                                                    // Uncomment to activate run modes and controls
+  for(int i=0; controlPedals[i].pin !=0; ++i) {         // Set pinmode for control switches
+    pinMode(controlPedals[i].pin, INPUT_PULLUP);
+  }
+  pinMode(modeSwitchPin, INPUT_PULLUP);                 // Set pinmode for mode switch
+  */
+  Serial.begin(31250);                                  // Start serial with midi baudrate 31250 
+}
+
+void midiSend(byte cmd, byte data1, byte data2) {       // Function for sending the MIDI signal
+  Serial.write(cmd);
+  Serial.write(data1);
+  Serial.write(data2);
+}
+
+void noteOn(int midiNote) {                             // Note ON function
+  midiSend(0x90, midiNote, noteVelocity);
+}
+
+void noteOff(int midiNote) {                            // Note OFF function
+  midiSend(0x80, midiNote, noteVelocity);
+}                                                       
+/*                                                      // Uncomment to activate controll and hold mode
+void octaveChange(int change) {                         // Octave change function
+  octave += change;
+}
+
+void velocityChange(int change) {                       // Velocity change function
+  noteVelocity += change;
+}
+
+void control() {                                        // Control switch functions
+  for(int i=0; controlPedals[i].pin !=0; ++i) {         // Iterates through the control pedals
+    controlSwitchState = digitalRead(controlPedals[i].pin);   // Reads the current state of the pedal
+
+    if(controlPedals[i].debounce == 0) {                // Checks if the switch pedals debounce counter is zero
+      if(controlSwitchState == LOW) {                         // Checks if the switch is activated
+        if(i == 0 || octave < 10) {                     // If octave UP switch is pressed and the current cotave value is less than ten
+          octaveChange(controlPedals[i].value);
+        }
+        else if(i == 1 || octave > 0) {                 // If octave DOWN switch is peressed and the current octave value is greater than zero
+          octaveChange(controlPedals[i].value);
+        }
+        else if(i == 2 || noteVelocity < 127) {         // If velocity UP switch is pressed and the current velocity value is less than 127
+          velocityChange(controlPedals[i].value);
+        }
+        else if(i == 3 || noteVelocity > 0) {           // If velocity DOWN switch is pressed and the current velocity value is greater than zero
+          velocityChange(controlPedals[i].value);
+        }
+        controlPedals[i].debounce = DEBOUNCE;           // Sets the debounce counter for the current switch
+      }
+    }
+    else {                                              // If the current pedals debounce counter hasnt reached zero
+      --controlPedals[i].debounce;                      // Counts down the debounce value of the current pedal
+    }
+  }
+}
+
+void holdMode() {                                       // Hold mode function
+  while(modeSwitchState == LOW) {                       // This function will loop as long as the mode pedal is activated
+    for(int i = 0; keys[i].pin != 0; ++i) {             // Iterates through the note pedals
+      notePedalState = digitalRead(keys[i].pin);        // Reads the current state of the pedal
+      if(keys[i].debounce == 0) {                       // Checks if the current pedals debounce counter is zero
+        if(notePedalState == LOW) {                // Checks if the pedal is activated
+          if(keys[i].midiNote == lastNoteSent) {        // If the same pedal is pressed twice the note is turned off
+            noteOff(lastNoteSent);
+          }
+          else {                                        // If it's a diferent pedal that is pressed
+            noteOff(lastNoteSent);                      // Turns OFF the last note
+            noteOn(keys[i].midiNote);                   // Turns ON the new note
+            lastNoteSent = keys[i].midiNote;            // stores the new note in the lastNoteSent variable
+            keys[i].debounce = DEBOUNCE;                // sets the debounce counter
+          }
+        }
+      }
+      else {                                            // If the current pedals debounce counter hasnt reached zero
+        --keys[i].debounce;                             // Counts down the debounce value of the current pedal
+      }
+    }
+    modeSwitchState = digitalRead(modeSwitchPin);       // Re-reads the state of the mode switch
+  }
+  noteOff(lastNoteSent);                                // Turns of the last note if left on before switching of the hold mode
+}
+*/
+void normalMode() {
+  for(int i = 0; keys[i].pin != 0; ++i) {               // Iterates through the note pedals
+    notePedalState = digitalRead(keys[i].pin);          // Reads the state of the pedal
+    
+    if(keys[i].debounce == 0) {                         // Pedal has been off
+      if(notePedalState == LOW) {                       // Pedal is now pressed
+        noteOn(keys[i].midiNote + 12*octave);           // Send the MIDI note on message
+        keys[i].noteSent = keys[i].midiNote + 12*octave;
+        keys[i].debounce = DEBOUNCE;                    // Set the note debounce counter
+      }
+    }
+    
+    else {                                              // Key has been on
+      if(notePedalState == HIGH) {                      // Key has gone off
+        if(--keys[i].debounce == 0) {                   // If Key has remained off for DEBOUNCE scans, 
+          noteOff(keys[i].noteSent);                    // In case the octave has changed, send MIDI off for the right note
+        }  
+      }
+      
+      else {                                            // Key has not gone off
+        keys[i].debounce = DEBOUNCE;                    // Reset debounce counter in case we got a small number of key off scans
+      }                                                 
+    }
+  }
+}
+
+void midiThru() {                                       // MIDI thru
+  if(Serial.available() > 0) {                          
+    byte1 = Serial.read();
+    byte2 = Serial.read();
+    byte3 = Serial.read();
+    midiSend(byte1, byte2, byte3);
+  }
+}
+
+void loop() {                                 
+  /*                                                    // Uncomment to activate hold mode
+  modeSwitchState = digitalRead(modeSwitchPin);         // Reads the state of the mode switch
+  */
+  midiThru();
+  /*                                                    // Uncomment to activate hold mode
+  if(modeSwitchState == LOW) {                          // Checks the state of the mode switch to se what mode to run
+    holdMode();
+  }
+  else {
+    normalMode();
+  }
+  
+  control();
+  */
+  normalMode();                                         // Must be commented out or deleted if hold mode is used
+}
