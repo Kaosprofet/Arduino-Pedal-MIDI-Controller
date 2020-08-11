@@ -1,5 +1,5 @@
 #define DEBOUNCE 50
-
+hello
 struct key {                                            // Note pedals initiation
     int pin;
     int midiNote;
