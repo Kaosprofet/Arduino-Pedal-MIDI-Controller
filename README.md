@@ -1,4 +1,4 @@
-# Pedal-Synth
+# Pedal MIDI Controller
 
 Making a pedal midi controller for synth.
 The code in this repository works at the moment using an Arduino Mega.
